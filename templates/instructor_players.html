@@ -1,0 +1,183 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hit4Power — Instructor</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script>
+    const setTheme = (t) => { document.documentElement.classList.toggle('light', t==='light'); localStorage.setItem('theme', t); };
+    const initTheme = () => { setTheme(localStorage.getItem('theme') || 'dark'); };
+    document.addEventListener('DOMContentLoaded', initTheme);
+  </script>
+</head>
+<body>
+<header class="nav">
+  <div class="brand">
+    <img src="/static/logo.svg" alt="logo">
+    <span>Hit4Power</span>
+  </div>
+  <nav class="links">
+    <a class="accent" href="/">Player</a>
+    {% if instructor %}
+      <form method="post" action="/logout"><button class="accent">Logout</button></form>
+    {% endif %}
+    <button class="ghost" onclick="setTheme(document.documentElement.classList.contains('light')?'dark':'light')">Theme</button>
+  </nav>
+</header>
+
+<div class="container">
+  {% set flash = pop_flash(request) %}
+  {% if flash %}
+    <div class="alert {{ 'ok' if flash.type=='ok' else 'warn' }}">{{ flash.msg }}</div>
+  {% endif %}
+
+  {% if not instructor %}
+    <div class="panel" style="max-width:520px;margin:0 auto;">
+      <h3>Instructor Login</h3>
+      <form method="post" action="/login_instructor" class="form-row">
+        <input name="code" placeholder="Enter Instructor Code" required>
+        <input name="name" placeholder="Your Name (only if creating new)">
+        <button class="btn">Login</button>
+      </form>
+      <div class="hr"></div>
+      <div class="small">Use master code to create a new instructor (set `INSTRUCTOR_MASTER_CODE` on Render).</div>
+    </div>
+  {% else %}
+
+  <div class="panels">
+    <div class="panel">
+      <h3>Clients <span class="small">(Roster)</span></h3>
+      <div class="form-row">
+        <button class="ghost" onclick="showGroup('my')">My Clients <span id="badge" class="badge">{{ starred_ids|length }}</span></button>
+        <button class="ghost" onclick="showGroup('7-9')">7-9</button>
+        <button class="ghost" onclick="showGroup('10-12')">10-12</button>
+        <button class="ghost" onclick="showGroup('13-15')">13-15</button>
+        <button class="ghost" onclick="showGroup('16-18')">16-18</button>
+        <button class="ghost" onclick="showGroup('18+')">18+</button>
+        <button class="ghost" onclick="showGroup('Unassigned')">Unassigned</button>
+      </div>
+      <div class="hr"></div>
+
+      <div id="grid-my" class="grid hidden">
+        {% for p in grouped['7-9'] + grouped['10-12'] + grouped['13-15'] + grouped['16-18'] + grouped['18+'] + grouped['Unassigned'] %}
+          {% if p.id in starred_ids %}
+          <div class="card" data-player="{{ p.id }}">
+            <button class="star {{ 'active' if p.id in starred_ids else '' }}" onclick="toggleStar({{p.id}}, this)">★</button>
+            <img class="avatar" src="{{ p.photo_path or '/static/logo.svg' }}">
+            <h4>{{ p.name }}</h4>
+            <div class="sub">{{ session_counts[p.id] }} sessions</div>
+          </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+
+      {% for group in ['7-9','10-12','13-15','16-18','18+','Unassigned'] %}
+      <div id="grid-{{group}}" class="grid {{ 'hidden' if group!='7-9' }}">
+        {% for p in grouped[group] %}
+          <div class="card" data-player="{{ p.id }}">
+            <button class="star {{ 'active' if p.id in starred_ids else '' }}" onclick="toggleStar({{p.id}}, this)">★</button>
+            <img class="avatar" src="{{ p.photo_path or '/static/logo.svg' }}">
+            <h4>{{ p.name }}</h4>
+            <div class="sub">{{ session_counts[p.id] }} sessions</div>
+            <div style="margin-top:8px;display:flex;gap:8px;">
+              <form method="post" action="/metrics/add">
+                <input type="hidden" name="player_id" value="{{ p.id }}">
+                <input type="number" step="0.1" name="exit_velocity" placeholder="Exit Velo">
+                <button class="btn">Add</button>
+              </form>
+            </div>
+            <div class="hr"></div>
+            <form method="post" action="/notes/add">
+              <input type="hidden" name="player_id" value="{{ p.id }}">
+              <textarea name="text" placeholder="Coach Notes..."></textarea>
+              <div class="form-row" style="gap:8px;">
+                <label class="small" style="display:flex;align-items:center;gap:6px;"><input type="checkbox" name="share_with_player" value="1"> Share with player</label>
+                <button class="btn">Save</button>
+              </div>
+            </form>
+            <div class="hr"></div>
+            <div class="small">Send Text</div>
+            {% if sms_ready %}
+              <form method="post" action="/text/send" class="form-row">
+                <input type="hidden" name="player_id" value="{{ p.id }}">
+                <input name="body" placeholder="Message to {{ p.name }}">
+                <button class="btn">Send</button>
+              </form>
+            {% else %}
+              <div class="alert warn small">Twilio not configured.</div>
+            {% endif %}
+            <div class="hr"></div>
+            <div>
+              <div class="small">Drill Library</div>
+              <form method="post" action="/drills/send" class="form-row">
+                <input type="hidden" name="player_id" value="{{ p.id }}">
+                <select name="filename">
+                  {% for f in drill_files %}<option value="/static/drills/{{f}}">{{ f }}</option>{% endfor %}
+                </select>
+                <input name="title" placeholder="Optional title">
+                <label class="small" style="display:flex;align-items:center;gap:6px;"><input type="checkbox" name="text_also" value="1"> Text too</label>
+                <button class="btn">Share</button>
+              </form>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="panel">
+      <h3>Actions</h3>
+      <div class="small">Upload a drill (instructors only)</div>
+      <form method="post" action="/drills/upload" enctype="multipart/form-data" class="form-row">
+        <input type="file" name="file" required>
+        <button class="btn">Upload Drill</button>
+      </form>
+      <div class="hr"></div>
+      <h3>Create Player</h3>
+      <form method="post" action="/players/create" enctype="multipart/form-data" class="form-row">
+        <input name="name" placeholder="Name" required>
+        <input name="age" type="number" placeholder="Age">
+        <input name="phone" placeholder="Phone e.g. +15551234567">
+        <input type="file" name="photo" accept="image/*">
+        <button class="btn">Create</button>
+      </form>
+      <div class="hr"></div>
+      <h3>Bulk Import CSV</h3>
+      <form method="post" action="/players/bulk_csv" enctype="multipart/form-data" class="form-row">
+        <input type="file" name="file" accept=".csv" required>
+        <button class="btn">Import</button>
+      </form>
+      <div class="small">CSV headers: <code>name,age,phone</code></div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<footer class="footer">
+  <div class="small">© {{ now().year }} Hit4Power</div>
+  <div class="links">
+    <a href="https://www.instagram.com/hit4.power/" target="_blank">Instagram</a>
+    <a href="https://www.hit4power.com/" target="_blank">Website</a>
+  </div>
+</footer>
+
+<script>
+function showGroup(id){
+  ['my','7-9','10-12','13-15','16-18','18+','Unassigned'].forEach(g=>{
+    const el = document.getElementById('grid-'+g);
+    if(el) el.classList.toggle('hidden', g!==id);
+  });
+}
+async function toggleStar(playerId, btn){
+  const fd = new FormData(); fd.append('player_id', playerId);
+  const r = await fetch('/star/toggle', { method:'POST', body: fd });
+  const j = await r.json();
+  if(j.ok){
+    btn.classList.toggle('active', j.active);
+    document.getElementById('badge').innerText = j.count;
+  }
+}
+</script>
+</body>
+</html>

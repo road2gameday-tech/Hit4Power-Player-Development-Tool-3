@@ -1,0 +1,122 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hit4Power — Player</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script>
+    const setTheme = (t) => { document.documentElement.classList.toggle('light', t==='light'); localStorage.setItem('theme', t); };
+    const initTheme = () => { setTheme(localStorage.getItem('theme') || 'dark'); };
+    document.addEventListener('DOMContentLoaded', initTheme);
+  </script>
+</head>
+<body>
+<header class="nav">
+  <div class="brand">
+    <img src="/static/logo.svg" alt="logo">
+    <span>Hit4Power</span>
+  </div>
+  <nav class="links">
+    <a class="accent" href="https://www.instagram.com/hit4.power/" target="_blank">Instagram</a>
+    <a class="accent" href="https://www.hit4power.com/" target="_blank">Website</a>
+    {% if get_user(request) and get_user(request).type == 'player' %}
+      <form method="post" action="/logout"><button class="accent">Logout</button></form>
+    {% endif %}
+    <button class="ghost" onclick="setTheme(document.documentElement.classList.contains('light')?'dark':'light')">Theme</button>
+  </nav>
+</header>
+
+<div class="container">
+  {% set flash = pop_flash(request) %}
+  {% if flash %}
+    <div class="alert {{ 'ok' if flash.type=='ok' else 'warn' }}">{{ flash.msg }}</div>
+  {% endif %}
+
+  {% if not player %}
+    <div class="panel" style="max-width:480px;margin:0 auto;">
+      <h3>Player Login</h3>
+      <form method="post" action="/login_player" class="form-row">
+        <input name="code" placeholder="Enter Player Code" required>
+        <button class="btn">Login</button>
+      </form>
+      <div class="hr"></div>
+      <div class="small">Are you an instructor? <a class="link" href="/instructor">Go to Instructor</a></div>
+    </div>
+  {% else %}
+    <div class="panels">
+      <div class="panel">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <img class="avatar" src="{{ player.photo_path or '/static/logo.svg' }}" alt="avatar">
+          <div>
+            <h3 style="margin:0;">{{ player.name }}</h3>
+            <div class="small">Clients</div>
+          </div>
+        </div>
+        <div class="hr"></div>
+        <div>
+          <h3>Exit Velocity</h3>
+          <div class="chart-wrap"><canvas id="evChart"></canvas></div>
+        </div>
+        <div class="hr"></div>
+        <div>
+          <h3>Coach Notes</h3>
+          {% if shared_note %}
+            <div class="card">
+              <div class="sub">{{ shared_note.created_at.strftime('%Y-%m-%d') }}</div>
+              <div style="margin-top:6px;">{{ shared_note.text }}</div>
+            </div>
+          {% else %}
+            <div class="small">No coach notes yet.</div>
+          {% endif %}
+        </div>
+      </div>
+      <div class="panel">
+        <h3>Quick Links</h3>
+        <div class="form-row">
+          <a class="btn" href="/instructor">Instructor Portal</a>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+</div>
+
+<footer class="footer">
+  <div class="small">© {{ now().year }} Hit4Power</div>
+  <div class="links">
+    <a href="https://www.instagram.com/hit4.power/" target="_blank">Instagram</a>
+    <a href="https://www.hit4power.com/" target="_blank">Website</a>
+  </div>
+</footer>
+
+{% if player %}
+<script>
+const pts = {{ chart_points | tojson | safe }};
+const ctx = document.getElementById('evChart').getContext('2d');
+const chart = new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels: pts.map(p=>p.x),
+    datasets: [{
+      label: 'Exit Velocity',
+      data: pts.map(p=>p.y),
+      borderColor: '#e11d48',
+      backgroundColor: 'rgba(225,29,72,.15)',
+      tension: .3
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      y: { beginAtZero: true, ticks: { color: getComputedStyle(document.documentElement).getPropertyValue('--text') } },
+      x: { ticks: { color: getComputedStyle(document.documentElement).getPropertyValue('--text') } }
+    }
+  }
+});
+</script>
+{% endif %}
+</body>
+</html>
